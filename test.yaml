@@ -1,0 +1,9 @@
+response:
+  status: "200 OK"
+  statusCode: 200
+  headers:
+    val1: val1Value
+    val2: val2Value
+  body: test
+port: 5000
+path: test/path

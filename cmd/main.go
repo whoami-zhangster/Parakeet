@@ -1,14 +1,10 @@
 package main
 
 import (
-	"time"
-
-	"net/http"
-
-	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
 	conf "github.com/whoami-zhangster/Parakeet/pkg/config"
+	"github.com/whoami-zhangster/Parakeet/pkg/rest"
 )
 
 func main() {
@@ -25,21 +21,7 @@ func main() {
 		panic(err)
 	}
 
-	// create endpoint w/ operations and payload
-	r := mux.NewRouter()
-	r.HandleFunc(endpointConfig.Path, endpointConfig.CreateHandleFunc())
+	srv := rest.NewHttpServer(log, *endpointConfig)
 
-	srv := &http.Server{
-		Addr: "0.0.0.0:8080",
-		// Good practice to set timeouts to avoid Slowloris attacks.
-		WriteTimeout: time.Second * 15,
-		ReadTimeout:  time.Second * 15,
-		IdleTimeout:  time.Second * 60,
-		Handler:      r, // Pass our instance of gorilla/mux in.
-	}
-
-	err = srv.ListenAndServe()
-	if err != nil {
-		panic(err)
-	}
+	srv.CreateServers()
 }

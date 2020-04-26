@@ -12,7 +12,7 @@ import (
 )
 
 // Setup takes the configFile path as a command line argument, loads the file and parses it into Endpoint struct
-func Setup(log logger.Logger) (*rest.Endpoint, error) {
+func Setup(log logger.Logger) (*rest.HttpServerConfig, error) {
 	var configFile string
 	flag.StringVar(&configFile, "config", "config.yaml", "config filepath for yaml file")
 	flag.Parse()
@@ -27,7 +27,7 @@ func Setup(log logger.Logger) (*rest.Endpoint, error) {
 		return nil, err
 	}
 
-	endpoint := &rest.Endpoint{}
+	endpoint := &rest.HttpServerConfig{}
 
 	err = parse(cf, endpoint)
 	if err != nil {

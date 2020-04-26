@@ -2,7 +2,6 @@ package rest
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -37,6 +36,7 @@ type (
 
 	API struct {
 		Methods map[string]ResponseConfig // method to response
+		kill    chan bool
 		log     logger.Logger
 		path    string
 		port    int
@@ -70,6 +70,7 @@ func NewHttpServer(log logger.Logger, config HttpServerConfig) *HttpServer {
 func newAPI(log logger.Logger, path string, port int, config APIConfig) *API {
 	return &API{
 		Methods: config.Methods,
+		kill:    make(chan bool),
 		log:     log,
 		path:    path,
 		port:    port,
@@ -79,7 +80,13 @@ func newAPI(log logger.Logger, path string, port int, config APIConfig) *API {
 func (hs *HttpServer) CreateServers() {
 	for _, api := range hs.API {
 		// Run ea. server in goroutine
-		api.CreateAndRunServer()
+		go api.CreateAndRunServer()
+	}
+}
+
+func (hs *HttpServer) KillAllAPI() {
+	for _, api := range hs.API {
+		api.kill <- true
 	}
 }
 
@@ -98,27 +105,20 @@ func (api *API) CreateAndRunServer() {
 	// assign created server to api
 	api.srv = srv
 
-	err := srv.ListenAndServe()
-	if err != nil {
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			api.log.Error((err))
+		}
+	}()
+
+	<-api.kill // wait until kill
+	api.log.Infof("killing api %s", api.path)
+	if api.srv == nil {
+		api.log.Error("no server to kill")
+	}
+	if err := api.srv.Close(); err != nil {
 		api.log.Error(err)
 	}
-
-	// Run server in goroutine
-	/*
-		go func() {
-			if err := srv.ListenAndServe(); err != nil {
-				api.log.Error((err))
-			}
-		}()
-	*/
-}
-
-func (api *API) KillServer() error {
-	if api.srv == nil {
-		return errors.New("no server to kill")
-	}
-
-	return api.srv.Close()
 }
 
 func (api *API) createRouter(path string) *mux.Router {

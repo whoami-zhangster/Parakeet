@@ -1,6 +1,10 @@
 package main
 
 import (
+	"os"
+	"os/signal"
+	"syscall"
+
 	"go.uber.org/zap"
 
 	conf "github.com/whoami-zhangster/Parakeet/pkg/config"
@@ -24,4 +28,10 @@ func main() {
 	srv := rest.NewHttpServer(log, *endpointConfig)
 
 	srv.CreateServers()
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	<-c
+	// kill all
+	srv.KillAllAPI()
 }

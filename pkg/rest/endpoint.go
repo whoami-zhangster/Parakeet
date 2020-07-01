@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -20,13 +21,13 @@ type (
 	}
 
 	HttpServer struct {
+		mu             sync.RWMutex
 		log            logger.Logger
 		API            map[string]*API `yaml:"api"`
-		serverMap      map[string]*http.Server
-		Port           int `yaml:"port"`
-		ReadTimeout    int `yaml:"readTimeout"`
-		WriteTimeout   int `yaml:"writeTimeout"`
-		MaxHeaderBytes int `yaml:"maxHeaderBytes"`
+		Port           int             `yaml:"port"`
+		ReadTimeout    int             `yaml:"readTimeout"`
+		WriteTimeout   int             `yaml:"writeTimeout"`
+		MaxHeaderBytes int             `yaml:"maxHeaderBytes"`
 	}
 
 	// API is a rest API definition
@@ -59,8 +60,6 @@ func NewHttpServer(log logger.Logger, config HttpServerConfig) *HttpServer {
 	return &HttpServer{
 		log:            log,
 		Port:           config.Port,
-		API:            m,
-		serverMap:      make(map[string]*http.Server),
 		ReadTimeout:    config.ReadTimeout,
 		WriteTimeout:   config.WriteTimeout,
 		MaxHeaderBytes: config.MaxHeaderBytes,
@@ -77,6 +76,21 @@ func newAPI(log logger.Logger, path string, port int, config APIConfig) *API {
 	}
 }
 
+func (hs *HttpServer) KillServer(path string) error {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+
+	val, exists := hs.API[path]
+	if !exists {
+		return fmt.Errorf("requested API to kill does not exist %s", path)
+	}
+	// send kill to api
+	val.kill <- true
+	// remove api
+	delete(hs.API, path)
+	return nil
+}
+
 func (hs *HttpServer) CreateServers() {
 	for _, api := range hs.API {
 		// Run ea. server in goroutine
@@ -84,7 +98,28 @@ func (hs *HttpServer) CreateServers() {
 	}
 }
 
+func (hs *HttpServer) AddAPI(path string, config APIConfig) error {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+
+	hs.log.Infof("Adding API path: %s", path)
+
+	if _, contains := hs.API[path]; contains {
+		fmt.Errorf("Already contains path: %s. Kill API before starting a new one.", path)
+	}
+
+	api := newAPI(hs.log, path, hs.Port, config)
+	hs.API[path] = api
+
+	go api.CreateAndRunServer()
+
+	return nil
+}
+
 func (hs *HttpServer) KillAllAPI() {
+	hs.mu.Lock()
+	defer hs.mu.Unlock()
+
 	for _, api := range hs.API {
 		api.kill <- true
 	}
